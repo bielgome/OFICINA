@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oficina Mecânica 3D — 300m²</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #fff; }
+  #canvas { display: block; width: 100vw; height: 100vh; }
+
+  #hud {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); border: 1px solid #444; border-radius: 8px;
+    padding: 8px 20px; font-size: 13px; color: #ccc; pointer-events: none;
+    white-space: nowrap; letter-spacing: 0.5px;
+  }
+
+  #area-label {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,20,20,0.85); border: 1px solid #555; border-radius: 6px;
+    padding: 6px 16px; font-size: 14px; color: #f0c060; letter-spacing: 1px;
+    pointer-events: none; transition: opacity 0.5s;
+  }
+
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 20px; height: 20px; pointer-events: none;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(255,255,255,0.6);
+  }
+  #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+  #crosshair::after { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+
+  /* SIDE PANEL */
+  #panel {
+    position: fixed; right: 0; top: 0; width: 340px; height: 100vh;
+    background: rgba(10,10,15,0.95); border-left: 1px solid #333;
+    overflow-y: auto; transform: translateX(100%); transition: transform 0.3s ease;
+    z-index: 100; padding: 0 0 40px;
+  }
+  #panel.open { transform: translateX(0); }
+  .panel-header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    padding: 20px; border-bottom: 1px solid #333;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .panel-header h2 { font-size: 16px; color: #f0c060; letter-spacing: 1px; }
+  .panel-close { background: none; border: 1px solid #555; color: #aaa; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+  .panel-close:hover { background: #333; }
+
+  .panel-section { padding: 16px 20px; border-bottom: 1px solid #222; }
+  .panel-section h3 { font-size: 12px; color: #f0c060; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  .panel-desc { font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 12px; }
+
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    flex: 1; min-width: 80px; padding: 8px 12px; border-radius: 5px; border: 1px solid #444;
+    background: #1a1a2e; color: #ccc; cursor: pointer; font-size: 12px; transition: all 0.2s;
+  }
+  .btn:hover { background: #2a2a4e; border-color: #f0c060; color: #f0c060; }
+  .btn.danger { border-color: #c0392b; color: #e74c3c; }
+  .btn.danger:hover { background: #2a0a0a; }
+  .btn.active { background: #16213e; border-color: #3498db; color: #3498db; }
+
+  .elevator-ctrl { display: flex; flex-direction: column; gap: 8px; }
+  .elevator-item { background: #111; border: 1px solid #333; border-radius: 6px; padding: 12px; }
+  .elevator-item label { font-size: 12px; color: #888; display: block; margin-bottom: 8px; }
+  .elevator-btns { display: flex; gap: 6px; }
+  .elevator-btns button {
+    flex: 1; padding: 6px; background: #1a1a2e; border: 1px solid #444;
+    color: #ccc; border-radius: 4px; cursor: pointer; font-size: 12px;
+  }
+  .elevator-btns button:hover { background: #2a2a4e; border-color: #f0c060; color: #f0c060; }
+
+  /* DASHBOARD inside panel */
+  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .dash-item { background: #111; border: 1px solid #2a2a2a; border-radius: 6px; padding: 8px 10px; }
+  .dash-item .val { font-size: 20px; font-weight: 600; color: #3498db; }
+  .dash-item .lbl { font-size: 10px; color: #666; margin-top: 2px; }
+  .dash-bar {}
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .bar-lbl { font-size: 11px; color: #888; width: 70px; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+  .bar-fill.green { background: #27ae60; }
+  .bar-fill.yellow { background: #f39c12; }
+  .bar-fill.red { background: #e74c3c; }
+  .bar-pct { font-size: 11px; color: #666; width: 30px; text-align: right; }
+  .dash-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .dash-actions button {
+    flex: 1; min-width: 70px; padding: 6px 8px; border-radius: 4px; border: 1px solid #333;
+    background: #111; color: #aaa; cursor: pointer; font-size: 11px; transition: all 0.2s;
+  }
+  .dash-actions button:hover { border-color: #f0c060; color: #f0c060; background: #1a1a2e; }
+  .dash-actions button.add { border-color: #27ae60; color: #27ae60; }
+  .dash-actions button.add:hover { background: #0a1e10; }
+  .dash-actions button.rem { border-color: #e74c3c; color: #e74c3c; }
+  .dash-actions button.rem:hover { background: #1e0a0a; }
+
+  #controls-hint {
+    position: fixed; bottom: 16px; right: 16px;
+    background: rgba(10,10,15,0.85); border: 1px solid #2a2a2a; border-radius: 8px;
+    padding: 12px 16px; font-size: 11px; color: #666; line-height: 1.9;
+  }
+  #controls-hint span { color: #f0c060; }
+
+  #loading {
+    position: fixed; inset: 0; background: #050508; z-index: 999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  }
+  #loading h1 { font-size: 26px; color: #f0c060; letter-spacing: 3px; }
+  #loading p { font-size: 13px; color: #666; }
+  .load-bar { width: 300px; height: 3px; background: #1a1a2e; border-radius: 2px; overflow: hidden; }
+  .load-fill { height: 100%; background: #f0c060; width: 0; animation: loadAnim 2s ease-out forwards; }
+  @keyframes loadAnim { to { width: 100%; } }
+
+  #export-modal {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+    z-index: 200; align-items: center; justify-content: center;
+  }
+  #export-modal.open { display: flex; }
+  .modal-box {
+    background: #0f0f18; border: 1px solid #444; border-radius: 12px;
+    padding: 30px; width: 400px; max-width: 90vw;
+  }
+  .modal-box h2 { font-size: 18px; color: #f0c060; margin-bottom: 6px; }
+  .modal-box p { font-size: 13px; color: #777; margin-bottom: 20px; }
+  .modal-opt { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .modal-opt label { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #bbb; cursor: pointer; }
+  .modal-opt input[type=checkbox] { width: 16px; height: 16px; accent-color: #f0c060; }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns button {
+    flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #444;
+    background: #1a1a2e; color: #ccc; cursor: pointer; font-size: 13px;
+  }
+  .modal-btns button.primary { background: #f0c060; border-color: #f0c060; color: #0a0a0a; font-weight: 600; }
+  .modal-btns button:hover { opacity: 0.85; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #0a0a0a; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <h1>⚙ OFICINA 3D</h1>
+  <p>Construindo ambiente — 300 m²...</p>
+  <div class="load-bar"><div class="load-fill"></div></div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="hud">WASD — mover &nbsp;|&nbsp; Mouse — olhar &nbsp;|&nbsp; Shift+C — painel &nbsp;|&nbsp; E — exportar &nbsp;|&nbsp; Esc — sair</div>
+
+<div id="area-label">ENTRADA DA OFICINA</div>
+
+<div id="crosshair"></div>
+
+<!-- SIDE PANEL -->
+<div id="panel">
+  <div class="panel-header">
+    <h2>⚙ CONTROLES</h2>
+    <button class="panel-close" onclick="closePanel()">✕</button>
+  </div>
+
+  <div class="panel-section">
+    <h3>🔧 Elevadores</h3>
+    <p class="panel-desc">Controle os elevadores hidráulicos da área de reparação.</p>
+    <div class="elevator-ctrl">
+      <div class="elevator-item">
+        <label>Elevador 1 — Baia Principal</label>
+        <div class="elevator-btns">
+          <button onclick="liftUp(0)">▲ Subir</button>
+          <button onclick="liftStop(0)">⏸ Parar</button>
+          <button onclick="liftDown(0)">▼ Descer</button>
+        </div>
+      </div>
+      <div class="elevator-item">
+        <label>Elevador 2 — Baia Secundária</label>
+        <div class="elevator-btns">
+          <button onclick="liftUp(1)">▲ Subir</button>
+          <button onclick="liftStop(1)">⏸ Parar</button>
+          <button onclick="liftDown(1)">▼ Descer</button>
+        </div>
+      </div>
+      <div class="elevator-item">
+        <label>Elevador 3 — Alinhamento</label>
+        <div class="elevator-btns">
+          <button onclick="liftUp(2)">▲ Subir</button>
+          <button onclick="liftStop(2)">⏸ Parar</button>
+          <button onclick="liftDown(2)">▼ Descer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>📊 Dashboard — Estoque</h3>
+    <div class="dash-grid">
+      <div class="dash-item"><div class="val" id="d-pecas">247</div><div class="lbl">Peças</div></div>
+      <div class="dash-item"><div class="val" id="d-pneus">38</div><div class="lbl">Pneus</div></div>
+      <div class="dash-item"><div class="val" id="d-veiculos">8</div><div class="lbl">Veículos</div></div>
+      <div class="dash-item"><div class="val" id="d-ordens">12</div><div class="lbl">O.S. Abertas</div></div>
+    </div>
+    <div class="dash-bar">
+      <div class="bar-row"><span class="bar-lbl">Peças</span><div class="bar-track"><div class="bar-fill green" id="bar-pecas" style="width:82%"></div></div><span class="bar-pct" id="pct-pecas">82%</span></div>
+      <div class="bar-row"><span class="bar-lbl">Pneus</span><div class="bar-track"><div class="bar-fill yellow" id="bar-pneus" style="width:63%"></div></div><span class="bar-pct" id="pct-pneus">63%</span></div>
+      <div class="bar-row"><span class="bar-lbl">Resíduos</span><div class="bar-track"><div class="bar-fill red" style="width:45%"></div></div><span class="bar-pct">45%</span></div>
+    </div>
+    <div class="dash-actions">
+      <button class="add" onclick="addPeca()">+ Peça</button>
+      <button class="rem" onclick="removePeca()">− Peça</button>
+      <button class="add" onclick="addPneu()">+ Pneu</button>
+      <button class="rem" onclick="removePneu()">− Pneu</button>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>🚗 Veículos</h3>
+    <p class="panel-desc">Adicione ou remova veículos na oficina.</p>
+    <div class="btn-row">
+      <button class="btn" onclick="addVehicle('sedan')">+ Sedan</button>
+      <button class="btn" onclick="addVehicle('suv')">+ SUV</button>
+      <button class="btn" onclick="addVehicle('truck')">+ Pickup</button>
+    </div>
+    <div class="btn-row" style="margin-top:8px;">
+      <button class="btn danger" onclick="removeLastVehicle()">✕ Remover Último</button>
+      <button class="btn danger" onclick="removeAllVehicles()">✕✕ Remover Todos</button>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>🪑 Mobiliário</h3>
+    <div class="btn-row">
+      <button class="btn" onclick="addFurniture('bench')">+ Bancada</button>
+      <button class="btn" onclick="addFurniture('cabinet')">+ Armário</button>
+      <button class="btn" onclick="addFurniture('desk')">+ Mesa</button>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>👷 Pessoal</h3>
+    <div class="btn-row">
+      <button class="btn" onclick="addPerson()">+ Mecânico</button>
+      <button class="btn danger" onclick="removePerson()">✕ Remover</button>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>📍 Teletransporte</h3>
+    <div class="btn-row" style="flex-direction:column; gap:6px;">
+      <button class="btn" onclick="teleport(0,1.7,-5)">🔧 Oficina Principal</button>
+      <button class="btn" onclick="teleport(7.5,1.7,10)">🛎 Recepção</button>
+      <button class="btn" onclick="teleport(-7.5,1.7,10)">🍽 Cozinha</button>
+      <button class="btn" onclick="teleport(7.5,1.7,-11)">👔 Vestiário</button>
+      <button class="btn" onclick="teleport(-7.5,1.7,-11)">📦 Depósito</button>
+      <button class="btn" onclick="teleport(0,1.7,18)">🌿 Área Externa</button>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>📤 Exportar</h3>
+    <div class="btn-row">
+      <button class="btn" onclick="openExport()">Exportar STL/OBJ</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTROLS HINT -->
+<div id="controls-hint">
+  <span>W/S</span> Avançar/Recuar<br>
+  <span>A/D</span> Esquerda/Direita<br>
+  <span>Mouse</span> Olhar<br>
+  <span>Shift+C</span> Painel<br>
+  <span>E</span> Exportar<br>
+  <span>Esc</span> Sair
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="export-modal">
+  <div class="modal-box">
+    <h2>📤 Exportar Modelo 3D</h2>
+    <p>Selecione as opções e formato de exportação.</p>
+    <div class="modal-opt">
+      <label><input type="checkbox" id="exp-roof"> Remover telhado (visualização de planta)</label>
+      <label><input type="checkbox" id="exp-cars" checked> Incluir veículos</label>
+      <label><input type="checkbox" id="exp-furniture" checked> Incluir mobiliário</label>
+      <label><input type="checkbox" id="exp-topview"> Ativar visão superior antes de exportar</label>
+    </div>
+    <div class="modal-btns">
+      <button onclick="closeExport()">Cancelar</button>
+      <button class="primary" onclick="doExport('obj')">📦 ZIP — OBJ + MTL + Texturas</button>
+      <button class="primary" onclick="doExport('stl')" style="background:#555;border-color:#666;color:#ccc;">📦 ZIP — STL</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ====================== SCENE SETUP ======================
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 30, 80);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.position.set(0, 1.7, 5);
+
+// ====================== MATERIALS ======================
+const M = {
+  concrete: new THREE.MeshLambertMaterial({ color: 0x888888 }),
+  concreteFloor: new THREE.MeshLambertMaterial({ color: 0x9a9a9a }),
+  metal: new THREE.MeshLambertMaterial({ color: 0x556677 }),
+  metalDark: new THREE.MeshLambertMaterial({ color: 0x334455 }),
+  wall: new THREE.MeshLambertMaterial({ color: 0xddd8cc }),
+  wallGray: new THREE.MeshLambertMaterial({ color: 0xbbbbbb }),
+  ceiling: new THREE.MeshLambertMaterial({ color: 0xe8e4d8 }),
+  wood: new THREE.MeshLambertMaterial({ color: 0x8b6543 }),
+  woodLight: new THREE.MeshLambertMaterial({ color: 0xc8a06e }),
+  rubber: new THREE.MeshLambertMaterial({ color: 0x222222 }),
+  glass: new THREE.MeshLambertMaterial({ color: 0x88aacc, transparent: true, opacity: 0.3 }),
+  red: new THREE.MeshLambertMaterial({ color: 0xcc2222 }),
+  blue: new THREE.MeshLambertMaterial({ color: 0x2255aa }),
+  yellow: new THREE.MeshLambertMaterial({ color: 0xf0c060 }),
+  green: new THREE.MeshLambertMaterial({ color: 0x336633 }),
+  white: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+  orange: new THREE.MeshLambertMaterial({ color: 0xe07020 }),
+  darkGray: new THREE.MeshLambertMaterial({ color: 0x444444 }),
+  bodyRed: new THREE.MeshLambertMaterial({ color: 0xcc3333 }),
+  bodyBlue: new THREE.MeshLambertMaterial({ color: 0x2244aa }),
+  bodySilver: new THREE.MeshLambertMaterial({ color: 0xaaaaaa }),
+  bodyBlack: new THREE.MeshLambertMaterial({ color: 0x111111 }),
+  bodyWhite: new THREE.MeshLambertMaterial({ color: 0xeeeeee }),
+  bodyGreen: new THREE.MeshLambertMaterial({ color: 0x336633 }),
+  liftPlatform: new THREE.MeshLambertMaterial({ color: 0x445566 }),
+  stripe: new THREE.MeshLambertMaterial({ color: 0xf0c060 }),
+  screen: new THREE.MeshLambertMaterial({ color: 0x113355 }),
+};
+
+// ====================== HELPERS ======================
+function box(w,h,d,mat,x,y,z,rx=0,ry=0,rz=0) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  mesh.position.set(x,y,z);
+  mesh.rotation.set(rx,ry,rz);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+function cyl(rt,rb,h,seg,mat,x,y,z,rx=0,ry=0,rz=0) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), mat);
+  mesh.position.set(x,y,z);
+  mesh.rotation.set(rx,ry,rz);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+function group() { const g = new THREE.Group(); scene.add(g); return g; }
+
+// ====================== LIGHTING ======================
+// Ambient
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+// Sun
+const sun = new THREE.DirectionalLight(0xfff8e0, 1.2);
+sun.position.set(20, 30, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 100;
+sun.shadow.camera.left = -40;
+sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40;
+sun.shadow.camera.bottom = -40;
+scene.add(sun);
+
+// Interior fluorescent lights
+function addLight(x,y,z,intense=0.8) {
+  const l = new THREE.PointLight(0xffe8c0, intense, 18);
+  l.position.set(x,y,z);
+  scene.add(l);
+  // Lamp fixture
+  box(1.2,0.08,0.3, M.white, x,y+0.04,z);
+}
+
+// Workshop lights
+addLight(0,4.5,-5,1.0);
+addLight(-6,4.5,-5,0.8);
+addLight(6,4.5,-5,0.8);
+addLight(0,4.5,0,0.8);
+// Reception lights
+addLight(10,4.5,8,0.9);
+addLight(12,4.5,5,0.7);
+// Kitchen lights
+addLight(-10,4.5,8,0.8);
+// Locker room lights
+addLight(10,4.5,-8,0.8);
+// Storage lights
+addLight(-10,4.5,-8,0.6);
+
+// ====================== BUILDING STRUCTURE ======================
+// FLOOR — Main workshop (20x15m = 300m²)
+box(30,0.2,30, M.concreteFloor, 0,-0.1,0);
+// Outdoor floor
+box(30,0.1,10, M.concrete, 0,-0.05,20);
+
+// External ground
+box(60,0.05,60, new THREE.MeshLambertMaterial({color:0x55aa44}), 0,-0.13,10);
+
+// ---- MAIN WALLS ----
+const wallH = 5;
+const wallMat = M.wall;
+// Front wall (z=+15) with large door opening
+box(10,wallH,0.3, wallMat, -10,wallH/2,15);
+box(10,wallH,0.3, wallMat, 10,wallH/2,15);
+box(20,1,0.3, wallMat, 0,wallH-0.5,15); // top lintel
+// Back wall (z=-15)
+box(20,wallH,0.3, wallMat, 0,wallH/2,-15);
+// Left wall (x=-10) — with pedestrian door opening at z=11..13
+box(0.3,wallH,21, wallMat, -10,wallH/2,-4.5);
+box(0.3,wallH,2.5, wallMat, -10,wallH/2,2.25);
+box(0.3,wallH,4, wallMat, -10,wallH/2,7);
+box(0.3,2.5,2, wallMat, -10,3.95,12);
+box(0.3,wallH,2, wallMat, -10,wallH/2,14);
+// Right wall (x=+10) — with pedestrian door opening at z=11.5..12.5
+box(0.3,wallH,21, wallMat, 10,wallH/2,-4.5);    // south part z=-15 to z=1
+box(0.3,wallH,2.5, wallMat, 10,wallH/2,2.25);    // z=1 to z=3.5
+box(0.3,wallH,4, wallMat, 10,wallH/2,7);          // z=3.5 to z=11 (skip door at 11-13)
+box(0.3,2.5,2, wallMat, 10,3.95,12);              // above door opening
+box(0.3,wallH,2, wallMat, 10,wallH/2,14);         // z=13 to z=15
+
+// Ceiling
+box(20,0.3,30, M.ceiling, 0,wallH+0.15,0);
+
+// ---- INTERIOR WALLS (dividers) ----
+// Workshop / Back office divide (z=0)
+box(14,wallH,0.2, wallMat, -3,wallH/2,0);
+// Right side: Reception (x=5, z=2..15)
+box(0.2,wallH,13, wallMat, 5,wallH/2,8);
+// Left side: Kitchen (x=-5, z=2..15)
+box(0.2,wallH,13, wallMat, -5,wallH/2,8);
+// Locker room / storage (back z=-8)
+box(20,wallH,0.2, wallMat, 0,wallH/2,-8);
+// Left storage room
+box(0.2,wallH,7, wallMat, -5,wallH/2,-11.5);
+// Right locker room
+box(0.2,wallH,7, wallMat, 5,wallH/2,-11.5);
+// Bathroom (inside kitchen, x=-10..-5, z=10..15)
+box(0.2,wallH,5, wallMat, -7.5,wallH/2,12);
+
+// ---- ROOF PANELS (metal sheets) ----
+for(let i=-9;i<=9;i+=4) {
+  box(3.8,0.08,30, new THREE.MeshLambertMaterial({color:0x668899}), i,wallH+0.05,0);
+}
+
+// Trusses
+for(let z=-12;z<=12;z+=4) {
+  box(20,0.2,0.15, M.metalDark, 0,wallH-0.3,z);
+  box(0.15,0.5,0.15, M.metalDark, -9,wallH-0.5,z);
+  box(0.15,0.5,0.15, M.metalDark, 9,wallH-0.5,z);
+}
+
+// ---- WINDOWS ----
+function addWindow(x,y,z,w,h,d) {
+  // Frame
+  box(w+0.1,h+0.1,0.1, M.metalDark, x,y,z);
+  box(w,h,0.05, M.glass, x,y,z+0.06);
+}
+addWindow(7.5,3,15,2,1.5,0);
+addWindow(-7.5,3,15,2,1.5,0);
+addWindow(-10,3,-5,0.1,1.5,2);
+addWindow(10,3,-5,0.1,1.5,2);
+addWindow(10,3,8,0.1,1.5,2);
+
+// ---- DOORS ----
+function addDoor(x,y,z,w,h,horiz=false) {
+  const d = horiz ? 0.15 : 0.1;
+  const ww = horiz ? 0.1 : w;
+  const dd = horiz ? w : d;
+  box(ww+0.1,h,dd, M.woodLight, x,y,z);
+  box(ww,h-0.1,dd-0.02, new THREE.MeshLambertMaterial({color:0xd4a96a}), x,y,z+0.02);
+  // Handle
+  box(0.05,0.05,0.05, M.metal, x+(ww/2-0.15), y-0.1, z+0.04);
+}
+// Workshop to reception
+addDoor(5, 1.1, 1, 0.9, 2.2);
+// Workshop to kitchen
+addDoor(-5, 1.1, 1, 0.9, 2.2);
+// Back rooms
+addDoor(5, 1.1, -8, 0.9, 2.2);
+addDoor(-5, 1.1, -8, 0.9, 2.2);
+addDoor(0, 1.1, -8, 0.9, 2.2);
+// Bathroom
+addDoor(-7.5, 1.1, 9.5, 0.8, 2.1);
+// ---- MAIN GARAGE DOORS ----
+// Left garage door (partially open - slid aside)
+box(4.2,3.8,0.12, M.metalDark, -4.8,1.9,15.08);
+// Horizontal rail panels on door
+for(let y=0.3;y<3.8;y+=0.35){
+  box(4.0,0.04,0.04, new THREE.MeshLambertMaterial({color:0x445566}), -4.8,y,15.12);
+}
+// Right garage door  
+box(4.2,3.8,0.12, M.metalDark, 4.8,1.9,15.08);
+for(let y=0.3;y<3.8;y+=0.35){
+  box(4.0,0.04,0.04, new THREE.MeshLambertMaterial({color:0x445566}), 4.8,y,15.12);
+}
+// Door rails top
+box(20,0.12,0.12, M.metal, 0,3.9,15);
+box(20,0.08,0.08, M.metal, 0,0.06,15);
+// Center opening between doors (no mesh = open passage)
+// Door frame top lintel for center
+box(2,0.25,0.15, M.metalDark, 0,3.88,15);
+// Door frame sides
+box(0.15,3.8,0.15, M.metalDark, -1.0,1.9,15);
+box(0.15,3.8,0.15, M.metalDark, 1.0,1.9,15);
+
+// ---- PEDESTRIAN ENTRANCE DOOR (side of building, right) ----
+// Opening in right wall at z=12 (already handled by wall placement)
+// Door frame
+box(0.12,2.4,0.12, M.metalDark, 10,1.2,12.5);
+box(0.12,2.4,0.12, M.metalDark, 10,1.2,11.5);
+box(0.12,0.12,1.1, M.metalDark, 10,2.35,12);
+// Door leaf (glass door)
+box(0.08,2.2,0.95, M.glass, 10,1.1,12);
+box(0.04,0.05,0.05, M.metal, 10,1.1,12.4);
+
+// ---- PEDESTRIAN ENTRANCE DOOR (side of building, left) ----
+box(0.12,2.4,0.12, M.metalDark, -10,1.2,12.5);
+box(0.12,2.4,0.12, M.metalDark, -10,1.2,11.5);
+box(0.12,0.12,1.1, M.metalDark, -10,2.35,12);
+box(0.08,2.2,0.95, M.glass, -10,1.1,12);
+box(0.04,0.05,0.05, M.metal, -10,1.1,11.6);
+
+// ---- LARGE ENTRANCE SIGN ----
+box(8,0.8,0.15, M.metalDark, 0,4.4,15.1);
+box(7.6,0.5,0.05, new THREE.MeshLambertMaterial({color:0xf0c060}), 0,4.4,15.16);
+
+// ====================== ELEVATORS (LIFTS) ======================
+const lifts = [];
+function createLift(x,z,col) {
+  const g = new THREE.Group();
+  scene.add(g);
+  g.position.set(x,0,z);
+
+  // Pit markings
+  const markMat = new THREE.MeshLambertMaterial({color:col});
+  for(let side of[-1,1]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12,3,0.12), M.metalDark);
+    arm.position.set(side*1.4, 1.5, 0); g.add(arm);
+    const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.12,3,0.12), M.metalDark);
+    arm2.position.set(side*1.4, 1.5, 2); g.add(arm2);
+  }
+  // Lift platform
+  const platGeo = new THREE.BoxGeometry(3, 0.15, 2.5);
+  const plat = new THREE.Mesh(platGeo, M.liftPlatform);
+  plat.position.set(0, 0.08, 1);
+  g.add(plat);
+
+  // Stripe
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.8,0.02,0.2), M.stripe);
+  stripe.position.set(0,0.16,0.3); g.add(stripe);
+
+  // Hydraulic cylinder
+  const hyd = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.1,2,8), M.metal);
+  hyd.position.set(0,0,1); g.add(hyd);
+
+  // Floor markings
+  const fMat = new THREE.MeshLambertMaterial({color:col, transparent:true,opacity:0.5});
+  const fm = new THREE.Mesh(new THREE.BoxGeometry(3.2,0.01,2.7), fMat);
+  fm.position.set(0,-0.09,1); g.add(fm);
+
+  lifts.push({ group:g, dir:0, minY:0, maxY:2.5, platform:plat });
+  return g;
+}
+
+createLift(-3.5,-5,0xf0c060);
+createLift(0,-5,0x60a0f0);
+createLift(3.5,-5,0xf0c060);
+
+function liftUp(i) { if(lifts[i]) lifts[i].dir = 1; }
+function liftDown(i) { if(lifts[i]) lifts[i].dir = -1; }
+function liftStop(i) { if(lifts[i]) lifts[i].dir = 0; }
+
+// ====================== VEHICLES ======================
+const vehicleColors = [M.bodyRed, M.bodyBlue, M.bodySilver, M.bodyBlack, M.bodyWhite, M.bodyGreen];
+let vc = 0;
+const spawnedVehicles = [];
+
+function makeWheels(g, w, h, fl, fr, rl, rr) {
+  const wMat = M.rubber;
+  const wGeo = new THREE.CylinderGeometry(0.28,0.28,0.22,12);
+  [[fl[0],h-0.25,fl[1]], [fr[0],h-0.25,fr[1]],
+   [rl[0],h-0.25,rl[1]], [rr[0],h-0.25,rr[1]]].forEach(p=>{
+    const wh = new THREE.Mesh(wGeo, wMat);
+    wh.rotation.z = Math.PI/2;
+    wh.position.set(...p);
+    g.add(wh);
+    // Hubcap
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,0.24,8), M.metalDark);
+    hub.rotation.z = Math.PI/2;
+    hub.position.set(...p);
+    g.add(hub);
+  });
+}
+
+function createSedan(px,py,pz,rot,matBody) {
+  const g = new THREE.Group();
+  g.position.set(px,py,pz);
+  g.rotation.y = rot;
+
+  // Body lower
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4,0.7,1.8), matBody);
+  body.position.set(0,0.4,0); g.add(body);
+
+  // Body upper (cabin)
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.2,0.65,1.65), matBody);
+  cabin.position.set(-0.2,0.98,0); g.add(cabin);
+
+  // Glass windshield
+  const wind = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.6,1.5), M.glass);
+  wind.position.set(0.9,0.98,0); g.add(wind);
+  const rwind = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.6,1.5), M.glass);
+  rwind.position.set(-1.3,0.98,0); g.add(rwind);
+  // Side glass
+  const sg = new THREE.Mesh(new THREE.BoxGeometry(2,0.5,0.03), M.glass);
+  sg.position.set(-0.2,1.05,0.84); g.add(sg);
+  const sg2 = sg.clone(); sg2.position.z=-0.84; g.add(sg2);
+
+  // Headlights
+  const hlMat = new THREE.MeshLambertMaterial({color:0xffffcc});
+  [0.7,-0.7].forEach(z=>{
+    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.2,0.3), hlMat);
+    hl.position.set(2.02,0.45,z); g.add(hl);
+  });
+  // Tail lights
+  const tlMat = new THREE.MeshLambertMaterial({color:0xff2222});
+  [0.7,-0.7].forEach(z=>{
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.2,0.3), tlMat);
+    tl.position.set(-2.02,0.45,z); g.add(tl);
+  });
+
+  makeWheels(g, 4, 0, [1.4,0.85],[1.4,-0.85],[-1.4,0.85],[-1.4,-0.85]);
+
+  g.traverse(c=>{ if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} });
+  scene.add(g);
+  return g;
+}
+
+function createSUV(px,py,pz,rot,matBody) {
+  const g = new THREE.Group();
+  g.position.set(px,py,pz);
+  g.rotation.y = rot;
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4.2,0.8,2.0), matBody);
+  body.position.set(0,0.5,0); g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2,0.9,1.9), matBody);
+  roof.position.set(-0.1,1.25,0); g.add(roof);
+  // Glass
+  const wf = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.7,1.75), M.glass);
+  wf.position.set(1.5,1.1,0); g.add(wf);
+  const wr = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.7,1.75), M.glass);
+  wr.position.set(-1.7,1.1,0); g.add(wr);
+
+  [0.75,-0.75].forEach(z=>{
+    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.06,0.25,0.35), new THREE.MeshLambertMaterial({color:0xffffcc}));
+    hl.position.set(2.12,0.55,z); g.add(hl);
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06,0.25,0.35), new THREE.MeshLambertMaterial({color:0xff2222}));
+    tl.position.set(-2.12,0.55,z); g.add(tl);
+  });
+
+  makeWheels(g, 4.2, 0.1, [1.5,0.92],[1.5,-0.92],[-1.5,0.92],[-1.5,-0.92]);
+  g.traverse(c=>{ if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} });
+  scene.add(g);
+  return g;
+}
+
+// Place initial vehicles on lifts
+createSedan(-3.5,0,-5,0,M.bodyRed);
+createSUV(0,0,-5,0,M.bodyBlue);
+createSedan(3.5,0,-5,0,M.bodySilver);
+
+// Parked outside
+createSedan(-6,0,18,0,M.bodyBlack);
+createSedan(-3,0,18,0,M.bodyWhite);
+createSedan(0,0,18,0,M.bodyGreen);
+createSUV(4,0,18,0,M.bodyRed);
+createSedan(8,0,18,0,M.bodyBlue);
+
+// (no car in reception waiting area — replaced by client chairs)
+
+function addVehicle(type) {
+  const x = (Math.random()-0.5)*8;
+  const z = (Math.random()-0.5)*6;
+  const col = vehicleColors[vc++ % vehicleColors.length];
+  let v;
+  if(type==='sedan') v = createSedan(x,0,z,0,col);
+  else if(type==='suv') v = createSUV(x,0,z,0,col);
+  else v = createSedan(x,0.2,z,0,col);
+  spawnedVehicles.push(v);
+  updateDash();
+}
+function removeLastVehicle() {
+  if(spawnedVehicles.length) { scene.remove(spawnedVehicles.pop()); updateDash(); }
+}
+
+// ====================== TOOL BENCHES ======================
+function createBench(x,z,rot=0) {
+  const g = new THREE.Group();
+  g.position.set(x,0,z);
+  g.rotation.y = rot;
+  // Frame
+  const fr = new THREE.Mesh(new THREE.BoxGeometry(2,0.05,0.7), M.metal);
+  fr.position.set(0,0.9,0); g.add(fr);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2,0.08,0.7), M.wood);
+  top.position.set(0,0.94,0); g.add(top);
+  // Legs
+  [[-0.9,0.45,-0.3],[0.9,0.45,-0.3],[-0.9,0.45,0.3],[0.9,0.45,0.3]].forEach(p=>{
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.9,0.05), M.metal);
+    leg.position.set(...p); g.add(leg);
+  });
+  // Drawers
+  for(let i=0;i<3;i++) {
+    const dr = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.18,0.65), M.metalDark);
+    dr.position.set(0.6-i*0.6,0.6,0); g.add(dr);
+    const hndl = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.04,0.04), M.metal);
+    hndl.position.set(0.6-i*0.6,0.6,0.36); g.add(hndl);
+  }
+  // Tools on top
+  const wrench = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.04,0.06), M.metalDark);
+  wrench.position.set(-0.6,0.99,-0.1); g.add(wrench);
+  g.traverse(c=>{ if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} });
+  scene.add(g);
+  return g;
+}
+
+createBench(-8.5,-2);
+createBench(-8.5,-0.5);
+createBench(-8.5,1);
+createBench(8.5,-2,Math.PI);
+createBench(8.5,-0.5,Math.PI);
+
+const spawnedFurniture = [];
+function addFurniture(type) {
+  let f;
+  const x = (Math.random()-0.5)*12, z = (Math.random()-0.5)*10;
+  if(type==='bench') f = createBench(x,z);
+  else if(type==='cabinet') {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.5), M.metalDark);
+    body.position.set(x,0.9,z);
+    g.add(body); scene.add(body); f = body;
+  } else {
+    const g = new THREE.Group();
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.4,0.05,0.7), M.wood);
+    top.position.set(x,0.75,z); scene.add(top); f = top;
+  }
+  spawnedFurniture.push(f);
+}
+
+// ====================== RECEPTION AREA ======================
+// Counter
+box(3,0.9,0.5, M.woodLight, 8.5,0.45,11);
+box(3,0.05,0.5, M.wood, 8.5,0.9,11);
+// Chairs
+function chair(x,z,rot=0) {
+  const g = new THREE.Group();
+  g.position.set(x,0,z); g.rotation.y=rot;
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.05,0.5), M.blue);
+  seat.position.set(0,0.45,0); g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.05), M.blue);
+  back.position.set(0,0.7,-0.22); g.add(back);
+  [[-0.2,0.22,-0.2],[0.2,0.22,-0.2],[-0.2,0.22,0.2],[0.2,0.22,0.2]].forEach(p=>{
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.44,0.04), M.metalDark);
+    leg.position.set(...p); g.add(leg);
+  });
+  g.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});
+  scene.add(g);
+  return g;
+}
+chair(7,12,0); chair(7.6,12,0); chair(8.2,12,0);
+chair(9.5,9,Math.PI/2); chair(9.5,10,Math.PI/2);
+// Extra client waiting chairs
+chair(6,9,0); chair(6.6,9,0); chair(7.2,9,0);
+// Small waiting table with magazines
+box(0.6,0.04,0.4, M.woodLight, 8,0.42,9);
+box(0.5,0.02,0.35, new THREE.MeshLambertMaterial({color:0xff4444}), 8,0.45,9);
+box(0.5,0.02,0.35, new THREE.MeshLambertMaterial({color:0x4488ff}), 8,0.48,8.95);
+
+// Computer on counter
+box(0.3,0.35,0.03, M.screen, 8.5,1.08,11.05);
+box(0.3,0.02,0.2, M.metalDark, 8.5,0.91,11.15);
+
+// ====================== OFFICE AREA ======================
+// Desks
+function desk(x,z,rot=0) {
+  const g = new THREE.Group();
+  g.position.set(x,0,z); g.rotation.y=rot;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.4,0.05,0.7), M.wood);
+  top.position.set(0,0.75,0); g.add(top);
+  [[-0.65,0.375,-0.3],[0.65,0.375,-0.3],[-0.65,0.375,0.3],[0.65,0.375,0.3]].forEach(p=>{
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.75,0.05), M.metalDark);
+    leg.position.set(...p); g.add(leg);
+  });
+  const mon = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.35,0.03), M.screen);
+  mon.position.set(0,1.0,0); g.add(mon);
+  const monBase = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.02,0.15), M.metalDark);
+  monBase.position.set(0,0.77,0); g.add(monBase);
+  g.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});
+  scene.add(g);
+  return g;
+}
+desk(7.5,6); desk(9,6); desk(7.5,4); desk(9,4);
+
+// ====================== KITCHEN ======================
+// Counter
+box(4,0.9,0.6, M.white, -7.5,0.45,13.7);
+box(4,0.05,0.6, new THREE.MeshLambertMaterial({color:0xeeeeee}), -7.5,0.92,13.7);
+// Sink
+box(0.5,0.05,0.4, M.metalDark, -8,0.93,13.7);
+box(0.4,0.15,0.3, M.metal, -8,0.88,13.7);
+// Faucet
+cyl(0.02,0.02,0.3,6,M.metal,-8,1.08,13.5,Math.PI/2);
+// Fridge
+box(0.7,1.7,0.6, new THREE.MeshLambertMaterial({color:0xdddddd}), -5.5,0.85,13.7);
+box(0.05,0.05,0.05, M.metalDark, -5.16,0.9,13.7);
+// Microwave
+box(0.55,0.3,0.35, M.darkGray, -7,1.2,13.8);
+// Table and chairs
+box(1.2,0.05,0.8, M.woodLight, -7.5,0.75,11.5);
+chair(-8.2,11.5,Math.PI/2); chair(-6.8,11.5,-Math.PI/2);
+chair(-7.5,12.1,0); chair(-7.5,10.9,Math.PI);
+
+// ====================== BATHROOM (inside kitchen area) ======================
+// Toilet
+cyl(0.25,0.28,0.38,12,M.white,-9,0.19,13.5);
+cyl(0.28,0.28,0.08,12,M.white,-9,0.42,13.5);
+box(0.4,0.1,0.28, M.white, -9,0.5,13.22);
+// Sink
+box(0.4,0.08,0.3, M.white, -9,0.82,11.8);
+box(0.3,0.05,0.2, M.metal, -9,0.78,11.8);
+// Shower
+box(1,0.05,1, M.concrete, -8.5,0.03,11);
+box(0.05,1.8,1, M.glass, -8,0.9,11);
+box(1,1.8,0.05, M.glass, -8.5,0.9,10.5);
+// Shower head
+box(0.05,0.05,0.05, M.metal, -8.5,1.7,10.52);
+
+// ====================== LOCKER ROOM ======================
+function locker(x,z) {
+  const g = new THREE.Group();
+  g.position.set(x,0,z);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.5,1.8,0.45), M.metalDark);
+  b.position.set(0,0.9,0); g.add(b);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.48,0.85,0.02), M.metal);
+  door.position.set(0,1.2,0.24); g.add(door);
+  const door2 = new THREE.Mesh(new THREE.BoxGeometry(0.48,0.85,0.02), M.metal);
+  door2.position.set(0,0.35,0.24); g.add(door2);
+  const h = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.1,0.05), new THREE.MeshLambertMaterial({color:0xdddd00}));
+  h.position.set(0.18,1.2,0.26); g.add(h);
+  const h2 = h.clone(); h2.position.set(0.18,0.35,0.26); g.add(h2);
+  g.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});
+  scene.add(g);
+  return g;
+}
+for(let i=0;i<5;i++) { locker(5.5+i*0.55,-9); locker(5.5+i*0.55,-13); }
+// Bench
+box(2.5,0.05,0.35, M.wood, 7,-0,  -11);
+
+// ====================== BREAK ROOM (locker area) ======================
+function sofa(x,z,rot=0) {
+  const g = new THREE.Group();
+  g.position.set(x,0,z); g.rotation.y=rot;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.8,0.3,0.7), M.blue);
+  base.position.set(0,0.15,0); g.add(base);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.8,0.5,0.15), M.blue);
+  back.position.set(0,0.55,-0.27); g.add(back);
+  const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.35,0.7), M.blue);
+  arm1.position.set(-0.9,0.35,0); g.add(arm1);
+  const arm2 = arm1.clone(); arm2.position.x=0.9; g.add(arm2);
+  g.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});
+  scene.add(g);
+}
+sofa(7.5,-11,0); sofa(9.5,-10,-Math.PI/2);
+// TV
+box(1.2,0.7,0.08, M.darkGray, 8,-  1.1,-14.7);
+box(1.0,0.55,0.04, M.screen, 8,1.1,-14.7);
+box(0.1,0.3,0.05, M.metalDark, 8,0.57,-14.7);
+// Coffee table
+box(0.8,0.05,0.5, M.woodLight, 8,0.4,-11.5);
+
+// ====================== STORAGE ROOMS ======================
+// Tires
+function tire(x,y,z,rot=0) {
+  const g = new THREE.Group();
+  g.position.set(x,y,z); g.rotation.z=rot;
+  const outer = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.2,16), M.rubber);
+  outer.rotation.x=Math.PI/2; g.add(outer);
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.22,16), M.metalDark);
+  inner.rotation.x=Math.PI/2; g.add(inner);
+  scene.add(g);
+  return g;
+}
+for(let i=0;i<4;i++) { tire(-8,0.2+i*0.25,-10); tire(-8,0.2+i*0.25,-11); tire(-8,0.2+i*0.25,-12); }
+for(let i=0;i<3;i++) { tire(-7,0.2,-10-i); tire(-7,0.2,-10-i); }
+
+// Parts shelves
+function shelf(x,z) {
+  const g = new THREE.Group();
+  g.position.set(x,0,z);
+  box(0.05,2.5,0.8, M.metalDark, -0.6,1.25,0);
+  box(0.05,2.5,0.8, M.metalDark, 0.6,1.25,0);
+  for(let i=0;i<4;i++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(1.2,0.04,0.8), M.metal);
+    s.position.set(0, 0.3+i*0.6, 0);
+    g.add(s);
+    // Boxes on shelves
+    for(let j=0;j<3;j++) {
+      const bx = new THREE.Mesh(new THREE.BoxGeometry(0.25,0.2,0.2), new THREE.MeshLambertMaterial({color:0x884422+(j*0x112233)}));
+      bx.position.set(-0.4+j*0.4, 0.4+i*0.6, 0);
+      g.add(bx);
+    }
+  }
+  g.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});
+  scene.add(g);
+}
+shelf(-9,-10); shelf(-9,-12);
+
+// Hazardous waste drums
+function drum(x,z,col) {
+  const mat = new THREE.MeshLambertMaterial({color:col});
+  cyl(0.25,0.25,0.8,12,mat,x,0.4,z);
+  cyl(0.27,0.27,0.05,12,M.metalDark,x,0.82,z);
+  cyl(0.27,0.27,0.05,12,M.metalDark,x,0.02,z);
+  box(0.1,0.1,0.1, new THREE.MeshLambertMaterial({color:0xff0000}), x,0.55,z+0.22);
+}
+drum(-5.5,-10,0xffaa00); drum(-6.2,-10,0xff4400); drum(-6.9,-10,0xffdd00);
+drum(-5.5,-12,0x00aa44); drum(-6.2,-12,0x00aa44);
+
+// ====================== PERSONS (workers) ======================
+const persons = [];
+function createPerson(x,z,col) {
+  const g = new THREE.Group();
+  g.position.set(x,0,z);
+  const bodyMat = new THREE.MeshLambertMaterial({color:col||0x2255cc});
+  // Body
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.55,0.25), bodyMat);
+  torso.position.set(0,1.15,0); g.add(torso);
+  // Head
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.25,0.28,0.25), new THREE.MeshLambertMaterial({color:0xffcc99}));
+  head.position.set(0,1.6,0); g.add(head);
+  // Hard hat
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.13,0.12,8), new THREE.MeshLambertMaterial({color:0xffdd00}));
+  hat.position.set(0,1.77,0); g.add(hat);
+  // Arms
+  const armMat = bodyMat;
+  const la = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.45,0.12), armMat);
+  la.position.set(-0.27,0.98,0); g.add(la);
+  const ra = la.clone(); ra.position.x=0.27; g.add(ra);
+  // Legs
+  const legMat = new THREE.MeshLambertMaterial({color:0x333355});
+  const ll = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.5,0.18), legMat);
+  ll.position.set(-0.1,0.6,0); g.add(ll);
+  const rl = ll.clone(); rl.position.x=0.1; g.add(rl);
+  // Boots
+  const bootMat = new THREE.MeshLambertMaterial({color:0x222222});
+  const lb = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.1,0.22), bootMat);
+  lb.position.set(-0.1,0.35,0.03); g.add(lb);
+  const rb = lb.clone(); rb.position.x=0.1; g.add(rb);
+
+  g.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});
+  scene.add(g);
+  persons.push(g);
+  return g;
+}
+
+createPerson(-3,-2,0x2255cc);
+createPerson(0,-1,0xcc4422);
+createPerson(3,-2,0x225522);
+createPerson(8,9,0x2255cc);
+
+function addPerson() { createPerson((Math.random()-0.5)*12, (Math.random()-0.5)*8, 0x2255cc+(Math.floor(Math.random()*5)*0x111111)); }
+function removePerson() { if(persons.length) { scene.remove(persons.pop()); } }
+
+// ====================== OUTDOOR ELEMENTS ======================
+// Sidewalk
+box(20,0.12,2, new THREE.MeshLambertMaterial({color:0x999977}), 0,-0.04,16);
+
+// Fence posts
+for(let x=-12;x<=12;x+=2) {
+  cyl(0.05,0.05,1.2,6,M.metalDark,x,0.6,17);
+}
+box(24,0.08,0.08, M.metalDark, 0,1.1,17);
+box(24,0.08,0.08, M.metalDark, 0,0.5,17);
+
+// Trees
+function tree(x,z) {
+  cyl(0.12,0.15,1.5,6,new THREE.MeshLambertMaterial({color:0x6b4226}),x,0.75,z);
+  cyl(1.0,0.2,2.0,8,new THREE.MeshLambertMaterial({color:0x2d6a2d}),x,2.5,z);
+}
+tree(-12,14); tree(-12,20); tree(12,14); tree(12,20); tree(-14,-8); tree(14,-8);
+
+// Lamp posts
+function lampPost(x,z) {
+  cyl(0.06,0.06,4.5,6,M.metalDark,x,2.25,z);
+  cyl(0.25,0.08,0.2,6,new THREE.MeshLambertMaterial({color:0xffffaa}),x,4.6,z);
+  const l = new THREE.PointLight(0xfff8dd,0.6,8);
+  l.position.set(x,4.5,z);
+  scene.add(l);
+}
+lampPost(-8,16); lampPost(8,16); lampPost(-8,-14); lampPost(8,-14);
+
+// ====================== OIL STAINS / FLOOR DETAILS ======================
+const stainMat = new THREE.MeshLambertMaterial({color:0x555555, transparent:true, opacity:0.4});
+[[-3,-5],[0,-4],[3,-5],[-1,-2]].forEach(([x,z])=>{
+  const stain = new THREE.Mesh(new THREE.CircleGeometry(0.4+Math.random()*0.3,12), stainMat);
+  stain.rotation.x=-Math.PI/2;
+  stain.position.set(x,0.01,z);
+  scene.add(stain);
+});
+
+// Floor grid lines (workshop)
+const gridMat = new THREE.MeshLambertMaterial({color:0xf0c060,transparent:true,opacity:0.3});
+for(let i=-8;i<=8;i+=2) {
+  const g = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.01,16), gridMat);
+  g.position.set(i,0.01,0);
+  scene.add(g);
+}
+
+// ====================== AREA LABELS (3D text using planes) ======================
+const areaZones = [
+  { name:'OFICINA PRINCIPAL', xMin:-9,xMax:9,zMin:-15,zMax:0 },
+  { name:'RECEPÇÃO', xMin:5,xMax:10,zMin:0,zMax:15 },
+  { name:'COZINHA', xMin:-10,xMax:-5,zMin:0,zMax:15 },
+  { name:'VESTIÁRIO', xMin:5,xMax:10,zMin:-15,zMax:-8 },
+  { name:'DEPÓSITO', xMin:-10,xMax:-5,zMin:-15,zMax:-8 },
+  { name:'ÁREA EXTERNA', xMin:-12,xMax:12,zMin:15,zMax:25 },
+];
+
+// ====================== FIRST PERSON CONTROLS ======================
+const keys = {};
+let isLocked = false;
+let yaw = 0, pitch = 0;
+const vel = new THREE.Vector3();
+
+document.addEventListener('keydown', e => { keys[e.code] = true;
+  if(e.code==='ShiftLeft'||e.code==='ShiftRight') return;
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Shift+C to open panel
+document.addEventListener('keydown', e => {
+  if((e.shiftKey && e.code==='KeyC') || (e.shiftKey && e.key==='C')) {
+    togglePanel();
+  }
+  if(e.code==='KeyE') { openExport(); }
+  if(e.code==='Escape') {
+    if(document.getElementById('export-modal').classList.contains('open')) closeExport();
+    else if(document.getElementById('panel').classList.contains('open')) closePanel();
+    else if(isLocked) { document.exitPointerLock(); }
+  }
+});
+
+canvas.addEventListener('click', () => {
+  if(!document.getElementById('panel').classList.contains('open') &&
+     !document.getElementById('export-modal').classList.contains('open')) {
+    canvas.requestPointerLock();
+  }
+});
+
+document.addEventListener('pointerlockchange', () => {
+  isLocked = document.pointerLockElement === canvas;
+});
+
+document.addEventListener('mousemove', e => {
+  if(!isLocked) return;
+  yaw -= e.movementX * 0.002;
+  pitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch - e.movementY * 0.002));
+});
+
+// Panel controls
+function togglePanel() {
+  const p = document.getElementById('panel');
+  p.classList.toggle('open');
+  if(p.classList.contains('open') && isLocked) document.exitPointerLock();
+}
+function closePanel() { document.getElementById('panel').classList.remove('open'); }
+function openExport() {
+  document.getElementById('export-modal').classList.add('open');
+  if(isLocked) document.exitPointerLock();
+}
+function closeExport() { document.getElementById('export-modal').classList.remove('open'); }
+
+function teleport(x,y,z) {
+  camera.position.set(x,y,z);
+  closePanel();
+}
+
+// =====================================================================
+//  EXPORTAÇÃO ZIP — OBJ + MTL + TEXTURAS PNG PROCEDURAIS
+//  Usa JSZip (carregado via CDN)
+// =====================================================================
+
+// ── Helpers de cor ────────────────────────────────────────────────────
+function hexToRgb01(hex) {
+  return [((hex>>16)&0xff)/255, ((hex>>8)&0xff)/255, (hex&0xff)/255];
+}
+function rgb01Str(arr) { return arr.map(v=>v.toFixed(4)).join(' '); }
+
+function getMaterialHex(mat) {
+  if(!mat) return 0xaaaaaa;
+  if(Array.isArray(mat)) mat = mat[0];
+  return mat.color ? mat.color.getHex() : 0xaaaaaa;
+}
+function getMaterialOpacity(mat) {
+  if(!mat) return 1;
+  if(Array.isArray(mat)) mat = mat[0];
+  return (mat.transparent && mat.opacity!=null) ? mat.opacity : 1;
+}
+
+function matId(hex) {
+  return 'mat_' + hex.toString(16).padStart(6,'0').toUpperCase();
+}
+function texFileName(hex) {
+  return 'tex_' + hex.toString(16).padStart(6,'0').toUpperCase() + '.png';
+}
+
+// ── Classificação de superfície por cor ──────────────────────────────
+function classifySurface(hex, opacity) {
+  if(opacity < 0.6) return 'glass';
+  const r=(hex>>16)&0xff, g=(hex>>8)&0xff, b=hex&0xff;
+  const lum = (r+g+b)/3;
+  const isGray = Math.abs(r-g)<22 && Math.abs(g-b)<22 && Math.abs(r-b)<22;
+  if(isGray && lum>210) return 'wall';
+  if(isGray && lum>140) return 'concrete';
+  if(isGray && lum>80)  return 'metal';
+  if(isGray)            return 'metal_dark';
+  if(r>170 && g>120 && b<90) return 'wood';
+  if(r<50  && g<50  && b<50) return 'rubber';
+  return 'paint';   // cores sólidas — carros, armários, etc.
+}
+
+// ── Gerador de texturas PNG 256×256 via Canvas ────────────────────────
+const TEX_SZ = 256;
+
+function makeTex(type, hex) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = TEX_SZ;
+  const ctx = cv.getContext('2d');
+  const [R,G,B] = hexToRgb01(hex).map(v=>Math.round(v*255));
+
+  const fill = (r,g,b,a=255) => {
+    const id = ctx.getImageData(0,0,TEX_SZ,TEX_SZ);
+    const d = id.data;
+    for(let i=0;i<d.length;i+=4){d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=a;}
+    ctx.putImageData(id,0,0);
+  };
+  const noise = (r,g,b,amp,freq=4) => {
+    const id = ctx.getImageData(0,0,TEX_SZ,TEX_SZ); const d=id.data;
+    for(let y=0;y<TEX_SZ;y++) for(let x=0;x<TEX_SZ;x++){
+      const n=(Math.sin(x*freq*0.09)*Math.cos(y*freq*0.11)+Math.sin((x+y)*freq*0.06))*amp;
+      const i=(y*TEX_SZ+x)*4;
+      d[i]=Math.min(255,Math.max(0,r+n));d[i+1]=Math.min(255,Math.max(0,g+n));
+      d[i+2]=Math.min(255,Math.max(0,b+n));d[i+3]=255;
+    }
+    ctx.putImageData(id,0,0);
+  };
+
+  if(type==='concrete') {
+    fill(R,G,B); noise(R,G,B,20,3);
+    ctx.strokeStyle='rgba(0,0,0,0.1)'; ctx.lineWidth=1;
+    for(let i=0;i<10;i++){
+      ctx.beginPath();
+      const x0=Math.random()*TEX_SZ,y0=Math.random()*TEX_SZ;
+      ctx.moveTo(x0,y0);
+      ctx.lineTo(x0+(Math.random()-.5)*70,y0+(Math.random()-.5)*70);
+      ctx.stroke();
+    }
+  }
+  else if(type==='wall') {
+    fill(R,G,B); noise(R,G,B,8,2);
+    // linhas de reboco / alvenaria
+    ctx.strokeStyle='rgba(160,140,120,0.25)'; ctx.lineWidth=1.5;
+    const bw=48,bh=24;
+    for(let row=0;row*bh<TEX_SZ;row++){
+      const off=(row%2)*(bw/2);
+      for(let col=-1;col*bw<TEX_SZ;col++)
+        ctx.strokeRect(col*bw+off,row*bh,bw,bh);
+    }
+  }
+  else if(type==='metal'||type==='metal_dark') {
+    fill(R,G,B); noise(R,G,B,12,7);
+    // brushed metal — linhas horizontais finas
+    ctx.globalAlpha=0.07;
+    for(let y=0;y<TEX_SZ;y+=2){
+      ctx.fillStyle=Math.random()>.5?'#fff':'#000';
+      ctx.fillRect(0,y,TEX_SZ,1);
+    }
+    ctx.globalAlpha=1;
+    // specular strip central
+    const gr=ctx.createLinearGradient(0,0,TEX_SZ,0);
+    gr.addColorStop(0,'rgba(255,255,255,0)');
+    gr.addColorStop(.45,'rgba(255,255,255,0.18)');
+    gr.addColorStop(.55,'rgba(255,255,255,0.18)');
+    gr.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=gr; ctx.fillRect(0,0,TEX_SZ,TEX_SZ);
+  }
+  else if(type==='wood') {
+    fill(R,G,B);
+    // veias de madeira
+    for(let i=0;i<25;i++){
+      const y0=Math.random()*TEX_SZ;
+      const amp=3+Math.random()*6, freq=0.025+Math.random()*0.04;
+      ctx.beginPath();
+      for(let x=0;x<TEX_SZ;x++){
+        const y=y0+Math.sin(x*freq)*amp+(Math.random()-.5)*1.2;
+        x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      }
+      ctx.strokeStyle=`rgba(${Math.max(0,R-40)},${Math.max(0,G-28)},${Math.max(0,B-18)},0.55)`;
+      ctx.lineWidth=0.7+Math.random()*1.5;
+      ctx.stroke();
+    }
+  }
+  else if(type==='rubber') {
+    fill(R,G,B); noise(R,G,B,5,6);
+    // sulcos de pneu
+    ctx.strokeStyle='rgba(80,80,80,0.45)'; ctx.lineWidth=3;
+    for(let y=0;y<TEX_SZ;y+=14){
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(TEX_SZ,y);ctx.stroke();
+    }
+    ctx.lineWidth=1.5;
+    for(let x=0;x<TEX_SZ;x+=28){
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,TEX_SZ);ctx.stroke();
+    }
+  }
+  else if(type==='glass') {
+    fill(R,G,B,90);
+    const gr2=ctx.createLinearGradient(0,0,TEX_SZ,TEX_SZ);
+    gr2.addColorStop(0,'rgba(255,255,255,0.35)');
+    gr2.addColorStop(.5,'rgba(255,255,255,0.05)');
+    gr2.addColorStop(1,'rgba(255,255,255,0.2)');
+    ctx.fillStyle=gr2; ctx.fillRect(0,0,TEX_SZ,TEX_SZ);
+  }
+  else { // paint / generic — acabamento brilhante
+    fill(R,G,B); noise(R,G,B,5,2);
+    const gr3=ctx.createRadialGradient(TEX_SZ*.3,TEX_SZ*.3,0,TEX_SZ*.5,TEX_SZ*.5,TEX_SZ*.7);
+    gr3.addColorStop(0,'rgba(255,255,255,0.2)');
+    gr3.addColorStop(1,'rgba(0,0,0,0.1)');
+    ctx.fillStyle=gr3; ctx.fillRect(0,0,TEX_SZ,TEX_SZ);
+  }
+  return cv;
+}
+
+// Canvas → Uint8Array PNG via toDataURL + atob
+function canvasToPngBytes(cv) {
+  const dataURL = cv.toDataURL('image/png');
+  const b64 = dataURL.split(',')[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return arr;
+}
+
+// ── UV planar automático ──────────────────────────────────────────────
+function ensureUV(geo) {
+  if(geo.attributes.uv) return;
+  const pos = geo.attributes.position;
+  const uv  = new Float32Array(pos.count*2);
+  for(let i=0;i<pos.count;i++){
+    uv[i*2]   = (pos.getX(i) % 3)/3;
+    uv[i*2+1] = (pos.getZ(i) % 3)/3;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+}
+
+// ── Botão de progresso no modal ───────────────────────────────────────
+function setExportProgress(msg, pct) {
+  let bar = document.getElementById('exp-progress');
+  if(!bar) {
+    bar = document.createElement('div');
+    bar.id = 'exp-progress';
+    bar.style.cssText='margin-top:14px;font-size:12px;color:#aaa;';
+    document.querySelector('.modal-box').appendChild(bar);
+  }
+  bar.innerHTML = `${msg}<br><div style="margin-top:6px;height:4px;background:#222;border-radius:2px;overflow:hidden">
+    <div style="height:100%;background:#f0c060;width:${pct}%;transition:width .3s;border-radius:2px"></div></div>`;
+}
+
+// ── CONTROLE PRINCIPAL ────────────────────────────────────────────────
+function doExport(fmt) {
+  const removeRoof = document.getElementById('exp-roof').checked;
+  const topView    = document.getElementById('exp-topview').checked;
+
+  if(topView) {
+    camera.position.set(0,20,0.001);
+    camera.lookAt(0,0,0);
+    closeExport(); return;
+  }
+
+  const meshes = [];
+  scene.traverse(obj => {
+    if(!obj.isMesh) return;
+    if(removeRoof){ const wp=new THREE.Vector3(); obj.getWorldPosition(wp); if(wp.y>4.6) return; }
+    meshes.push(obj);
+  });
+
+  if(fmt==='obj') {
+    buildZipOBJ(meshes);
+  } else {
+    buildZipSTL(meshes);
+  }
+}
+
+// ── OBJ + MTL + PNGs → ZIP ───────────────────────────────────────────
+async function buildZipOBJ(meshes) {
+  setExportProgress('Carregando JSZip…', 5);
+
+  // Carrega JSZip dinamicamente se ainda não carregado
+  if(typeof JSZip === 'undefined') {
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  setExportProgress('Construindo materiais e texturas…', 15);
+
+  // 1 — catalogar materiais únicos e gerar texturas
+  const matMap = new Map(); // hex -> { texName, surface, opacity, pngBytes }
+  meshes.forEach(mesh => {
+    const hex = getMaterialHex(mesh.material);
+    if(matMap.has(hex)) return;
+    const opacity = getMaterialOpacity(mesh.material);
+    const surface = classifySurface(hex, opacity);
+    const texName = texFileName(hex);
+    const cv      = makeTex(surface, hex);
+    const pngBytes= canvasToPngBytes(cv);
+    matMap.set(hex, { texName, surface, opacity, pngBytes });
+  });
+
+  setExportProgress('Gerando arquivo .mtl…', 30);
+
+  // 2 — gerar MTL
+  let mtl = '# Oficina Mecanica 3D - Materiais com Texturas\n';
+  mtl += '# Gerado por OficinaSim\n';
+  mtl += '# Importe o ZIP no Blender: File > Import > Wavefront OBJ\n\n';
+
+  matMap.forEach(({ texName, surface, opacity }, hex) => {
+    const rgb = rgb01Str(hexToRgb01(hex));
+    const isGlass = surface === 'glass';
+    const isMetal = surface === 'metal' || surface === 'metal_dark';
+    const isWood  = surface === 'wood';
+    const isRubber= surface === 'rubber';
+
+    mtl += `newmtl ${matId(hex)}\n`;
+    mtl += `Ka ${rgb}\n`;                         // cor ambiente
+    mtl += `Kd ${rgb}\n`;                         // cor difusa
+    mtl += `Ks ${isMetal?'0.6000 0.6000 0.6000':'0.0500 0.0500 0.0500'}\n`;
+    mtl += `Ns ${isMetal?120:isWood?20:10}.0\n`;  // shininess
+    mtl += `d ${isGlass?'0.35':'1.00'}\n`;        // dissolve / opacidade
+    mtl += `Tr ${isGlass?'0.65':'0.00'}\n`;       // transparência
+    mtl += `illum ${isMetal?3:2}\n`;              // illumination model
+    mtl += `map_Kd textures/${texName}\n`;        // textura difusa
+    if(isMetal) mtl += `map_Ks textures/${texName}\n`; // spec map no metal
+    mtl += '\n';
+  });
+
+  setExportProgress('Gerando arquivo .obj…', 45);
+
+  // 3 — gerar OBJ
+  let obj = '# Oficina Mecanica 3D - 300m2\n';
+  obj += '# Gerado por OficinaSim\n';
+  obj += '# Para visualizar cores: importe o .obj (o .mtl e texturas/ sao lidos automaticamente)\n\n';
+  obj += 'mtllib oficina_mecanica.mtl\n\n';
+
+  let vBase=1, vtBase=1, vnBase=1, meshIdx=0;
+  const total = meshes.length;
+
+  for(let mi=0;mi<total;mi++) {
+    const mesh = meshes[mi];
+    if(mi%50===0) {
+      setExportProgress(`Processando objetos… ${mi}/${total}`, 45 + Math.round((mi/total)*40));
+      await new Promise(r=>setTimeout(r,0)); // yield para UI
+    }
+
+    const geo = mesh.geometry.clone();
+    geo.applyMatrix4(mesh.matrixWorld);
+    geo.computeVertexNormals();
+    ensureUV(geo);
+
+    const pos = geo.attributes.position;
+    const nor = geo.attributes.normal;
+    const uv  = geo.attributes.uv;
+    if(!pos){ geo.dispose(); continue; }
+
+    const hex  = getMaterialHex(mesh.material);
+    const name = matId(hex);
+
+    obj += `o obj_${++meshIdx}\n`;
+    obj += `usemtl ${name}\n`;
+
+    // vertices
+    for(let i=0;i<pos.count;i++)
+      obj += `v ${pos.getX(i).toFixed(5)} ${pos.getY(i).toFixed(5)} ${pos.getZ(i).toFixed(5)}\n`;
+
+    // texture coords
+    if(uv) {
+      for(let i=0;i<uv.count;i++)
+        obj += `vt ${uv.getX(i).toFixed(5)} ${uv.getY(i).toFixed(5)}\n`;
+    }
+
+    // normals
+    if(nor) {
+      for(let i=0;i<nor.count;i++)
+        obj += `vn ${nor.getX(i).toFixed(5)} ${nor.getY(i).toFixed(5)} ${nor.getZ(i).toFixed(5)}\n`;
+    }
+
+    // faces — f v/vt/vn
+    const hasUV = !!uv, hasNor = !!nor;
+    const idx = geo.index;
+    const faceCount = idx ? idx.count : pos.count;
+    for(let i=0;i<faceCount;i+=3) {
+      const ia=(idx?idx.getX(i)  :i)  +1;
+      const ib=(idx?idx.getX(i+1):i+1)+1;
+      const ic=(idx?idx.getX(i+2):i+2)+1;
+      const a=ia+vBase-1, b=ib+vBase-1, c=ic+vBase-1;
+      const ta=ia+vtBase-1,tb=ib+vtBase-1,tc=ic+vtBase-1;
+      const na=ia+vnBase-1,nb=ib+vnBase-1,nc=ic+vnBase-1;
+      if(hasUV&&hasNor) obj += `f ${a}/${ta}/${na} ${b}/${tb}/${nb} ${c}/${tc}/${nc}\n`;
+      else if(hasNor)   obj += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+      else              obj += `f ${a} ${b} ${c}\n`;
+    }
+
+    obj += '\n';
+    vBase  += pos.count;
+    vtBase += uv  ? uv.count  : 0;
+    vnBase += nor ? nor.count : 0;
+    geo.dispose();
+  }
+
+  setExportProgress('Empacotando ZIP…', 88);
+  await new Promise(r=>setTimeout(r,0));
+
+  // 4 — montar ZIP
+  const zip = new JSZip();
+  zip.file('oficina_mecanica.obj', obj);
+  zip.file('oficina_mecanica.mtl', mtl);
+
+  const texFolder = zip.folder('textures');
+  matMap.forEach(({ texName, pngBytes }) => {
+    texFolder.file(texName, pngBytes, { binary:true });
+  });
+
+  // README dentro do ZIP
+  const readme = [
+    'OFICINA MECANICA 3D — Pacote de Exportacao',
+    '==========================================',
+    '',
+    'Arquivos inclusos:',
+    '  oficina_mecanica.obj  — geometria 3D completa',
+    '  oficina_mecanica.mtl  — materiais e propriedades de superficie',
+    '  textures/*.png        — texturas procedurais por material',
+    '',
+    'Como importar no Blender:',
+    '  1. Extraia o ZIP em uma pasta',
+    '  2. File > Import > Wavefront (.obj)',
+    '  3. Selecione oficina_mecanica.obj',
+    '  4. As texturas sao carregadas automaticamente',
+    '',
+    'Como importar no MeshLab:',
+    '  File > Import Mesh > oficina_mecanica.obj',
+    '',
+    'Tipos de superficies presentes:',
+    '  - concrete  : piso e paredes com fissuras',
+    '  - wall      : alvenaria rebocada',
+    '  - metal     : aco escovado com specular',
+    '  - wood      : madeira com veios naturais',
+    '  - rubber    : borracha com sulcos de pneu',
+    '  - glass     : vidro semi-transparente',
+    '  - paint     : acabamento automotivo',
+    '',
+    'Gerado por OficinaSim — Oficina Mecanica 3D',
+  ].join('\n');
+  zip.file('LEIA-ME.txt', readme);
+
+  setExportProgress('Gerando download…', 96);
+  const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:6} });
+  triggerDownload('oficina_mecanica_3D.zip', blob);
+
+  setExportProgress('✅ ZIP baixado com sucesso!', 100);
+  setTimeout(()=>{
+    const bar=document.getElementById('exp-progress');
+    if(bar) bar.remove();
+    closeExport();
+    showToast('✅ oficina_mecanica_3D.zip baixado!\nConteúdo: .obj + .mtl + ' + matMap.size + ' texturas PNG\nExtraia a pasta e importe o .obj no Blender.');
+  }, 1200);
+}
+
+// ── STL → ZIP ─────────────────────────────────────────────────────────
+async function buildZipSTL(meshes) {
+  setExportProgress('Carregando JSZip…', 5);
+  if(typeof JSZip === 'undefined') {
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload=res; s.onerror=rej; document.head.appendChild(s);
+    });
+  }
+
+  setExportProgress('Gerando geometria STL…', 20);
+  let stl = 'solid oficina_mecanica\n';
+  for(let mi=0;mi<meshes.length;mi++){
+    const mesh=meshes[mi];
+    if(mi%60===0){ setExportProgress(`Exportando… ${mi}/${meshes.length}`, 20+Math.round((mi/meshes.length)*65)); await new Promise(r=>setTimeout(r,0)); }
+    const geo=mesh.geometry.clone();
+    geo.applyMatrix4(mesh.matrixWorld);
+    geo.computeVertexNormals();
+    const pos=geo.attributes.position, nor=geo.attributes.normal;
+    if(!pos||!nor){ geo.dispose(); continue; }
+    const cnt=geo.index?geo.index.count:pos.count;
+    for(let i=0;i<cnt;i+=3){
+      const ia=geo.index?geo.index.getX(i):i;
+      const ib=geo.index?geo.index.getX(i+1):i+1;
+      const ic=geo.index?geo.index.getX(i+2):i+2;
+      const nx=(nor.getX(ia)+nor.getX(ib)+nor.getX(ic))/3;
+      const ny=(nor.getY(ia)+nor.getY(ib)+nor.getY(ic))/3;
+      const nz=(nor.getZ(ia)+nor.getZ(ib)+nor.getZ(ic))/3;
+      stl+=`facet normal ${nx.toFixed(6)} ${ny.toFixed(6)} ${nz.toFixed(6)}\n outer loop\n`;
+      for(const id of[ia,ib,ic])
+        stl+=`  vertex ${pos.getX(id).toFixed(6)} ${pos.getY(id).toFixed(6)} ${pos.getZ(id).toFixed(6)}\n`;
+      stl+=' endloop\nendfacet\n';
+    }
+    geo.dispose();
+  }
+  stl+='endsolid oficina_mecanica\n';
+
+  setExportProgress('Empacotando ZIP…', 88);
+  const zip=new JSZip();
+  zip.file('oficina_mecanica.stl', stl);
+  zip.file('LEIA-ME.txt','STL nao suporta cores nativamente.\nPara modelo colorido use a opcao OBJ.\nImporte o .stl no Blender, MeshLab ou slicer de impressao 3D.');
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+  triggerDownload('oficina_mecanica_STL.zip', blob);
+  setExportProgress('✅ ZIP baixado!', 100);
+  setTimeout(()=>{ const b=document.getElementById('exp-progress'); if(b)b.remove(); closeExport(); showToast('✅ STL exportado em ZIP.\nNota: STL não tem cores — use OBJ para modelo colorido.'); },1000);
+}
+
+// ── Utilitários ───────────────────────────────────────────────────────
+function triggerDownload(name, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=name;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
+function showToast(msg) {
+  let t=document.getElementById('exp-toast');
+  if(!t){
+    t=document.createElement('div'); t.id='exp-toast';
+    t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#111;border:1px solid #27ae60;border-radius:8px;padding:14px 22px;font-size:13px;color:#ccc;line-height:1.7;z-index:999;white-space:pre-line;text-align:center;box-shadow:0 4px 20px rgba(0,200,100,0.2);transition:opacity .5s;';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.style.opacity='0',7000);
+}
+
+// ====================== STOCK MANAGEMENT ======================
+let stockPecas = 247, maxPecas = 300;
+let stockPneus = 38, maxPneus = 60;
+let dashVCount = 8;
+let dashOrdens = 12;
+
+function updateDash() {
+  dashVCount = 8 + spawnedVehicles.length;
+  document.getElementById('d-veiculos').textContent = dashVCount;
+  document.getElementById('d-pecas').textContent = stockPecas;
+  document.getElementById('d-pneus').textContent = stockPneus;
+
+  const pPct = Math.round((stockPecas/maxPecas)*100);
+  const tPct = Math.round((stockPneus/maxPneus)*100);
+  document.getElementById('bar-pecas').style.width = pPct+'%';
+  document.getElementById('pct-pecas').textContent = pPct+'%';
+  document.getElementById('bar-pneus').style.width = tPct+'%';
+  document.getElementById('pct-pneus').textContent = tPct+'%';
+
+  // Color coding
+  const bpEl = document.getElementById('bar-pecas');
+  bpEl.className = 'bar-fill '+(pPct>60?'green':pPct>30?'yellow':'red');
+  const btEl = document.getElementById('bar-pneus');
+  btEl.className = 'bar-fill '+(tPct>60?'green':tPct>30?'yellow':'red');
+}
+
+function addPeca() {
+  if(stockPecas < maxPecas) { stockPecas += 10; updateDash(); }
+}
+function removePeca() {
+  if(stockPecas > 0) { stockPecas = Math.max(0, stockPecas-10); updateDash(); }
+}
+function addPneu() {
+  if(stockPneus < maxPneus) { stockPneus++; updateDash(); }
+}
+function removePneu() {
+  if(stockPneus > 0) { stockPneus--; updateDash(); }
+}
+
+function removeAllVehicles() {
+  while(spawnedVehicles.length) { scene.remove(spawnedVehicles.pop()); }
+  updateDash();
+}
+
+// Animate OS counter
+setInterval(() => {
+  dashOrdens = 8 + Math.floor(Math.random()*10);
+  document.getElementById('d-ordens').textContent = dashOrdens;
+}, 9000);
+
+// ====================== AREA DETECTION ======================
+const areaLabel = document.getElementById('area-label');
+let lastArea = '';
+
+function detectArea(pos) {
+  for(const z of areaZones) {
+    if(pos.x>=z.xMin && pos.x<=z.xMax && pos.z>=z.zMin && pos.z<=z.zMax) return z.name;
+  }
+  return 'PÁTIO';
+}
+
+// ====================== ANIMATION LOOP ======================
+const clock = new THREE.Clock();
+let animT = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  animT += dt;
+
+  // Camera movement
+  if(isLocked) {
+    const speed = keys['ShiftLeft']||keys['ShiftRight'] ? 8 : 4;
+    const dir = new THREE.Vector3();
+    if(keys['KeyW']||keys['ArrowUp']) dir.z=-1;
+    if(keys['KeyS']||keys['ArrowDown']) dir.z=1;
+    if(keys['KeyA']||keys['ArrowLeft']) dir.x=-1;
+    if(keys['KeyD']||keys['ArrowRight']) dir.x=1;
+    dir.normalize().multiplyScalar(speed*dt);
+    dir.applyEuler(new THREE.Euler(0,yaw,0));
+    camera.position.add(dir);
+    // Clamp to building + outdoor area
+    camera.position.x = Math.max(-12, Math.min(12, camera.position.x));
+    camera.position.z = Math.max(-15, Math.min(25, camera.position.z));
+    camera.position.y = 1.7;
+    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  }
+
+  // Area label
+  const area = detectArea(camera.position);
+  if(area !== lastArea) {
+    lastArea = area;
+    areaLabel.textContent = area;
+    areaLabel.style.opacity = '1';
+    setTimeout(()=>{ areaLabel.style.opacity='0.4'; }, 2000);
+  }
+
+  // Lifts animation
+  lifts.forEach(lift => {
+    if(lift.dir !== 0) {
+      const newY = lift.group.position.y + lift.dir * 0.5 * dt;
+      lift.group.position.y = Math.max(lift.minY, Math.min(lift.maxY, newY));
+      if(lift.group.position.y >= lift.maxY || lift.group.position.y <= lift.minY) lift.dir = 0;
+    }
+  });
+
+  // Person idle animations
+  persons.forEach((p, i) => {
+    p.rotation.y = Math.sin(animT*0.3 + i) * 0.15;
+    p.position.y = Math.sin(animT*0.8 + i*1.7) * 0.02;
+  });
+
+  renderer.render(scene, camera);
+}
+
+// ====================== RESIZE ======================
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ====================== INIT ======================
+camera.position.set(0, 1.7, 12);
+camera.lookAt(0, 1.7, 0);
+animate();
+
+// Hide loading after delay
+setTimeout(() => {
+  const loading = document.getElementById('loading');
+  loading.style.transition = 'opacity 0.8s';
+  loading.style.opacity = '0';
+  setTimeout(() => loading.remove(), 800);
+}, 2200);
+</script>
+</body>
+</html>
